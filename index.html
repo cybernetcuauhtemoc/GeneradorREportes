@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Reporte Pro v6</title>
+    
+    <meta name="theme-color" content="#2c3e50">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+
+    <link rel="apple-touch-icon" href="icono.png">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        :root { --primary: #2c3e50; --accent: #3498db; --bg: #f4f7f6; --success: #27ae60; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding-bottom: 120px; }
+        
+        /* Logo Responsivo */
+        .header-app { background: var(--primary); color: white; padding: 15px; text-align: center; }
+        .logo-container { width: 100%; max-width: 220px; margin: 0 auto; }
+        #logoPreviewApp { width: 100%; height: auto; max-height: 85px; object-fit: contain; background: white; padding: 8px; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        
+        .container { max-width: 750px; margin: auto; padding: 15px; }
+        .card { background: white; padding: 18px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); border: 1px solid #eee; }
+        .input-field { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
+        
+        .item-reporte { border-left: 6px solid var(--accent); transition: all 0.3s ease; }
+        .preview-img { width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #ddd; display: none; background: #fafafa; }
+
+        /* Botones Flotantes */
+        .btn-add { position: fixed; bottom: 100px; right: 25px; width: 65px; height: 65px; border-radius: 50%; background: var(--accent); color: white; border: none; font-size: 35px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); z-index: 100; cursor: pointer; }
+        .footer-nav { position: fixed; bottom: 0; width: 100%; background: white; display: flex; padding: 20px; gap: 12px; border-top: 1px solid #ddd; box-sizing: border-box; box-shadow: 0 -3px 10px rgba(0,0,0,0.05); }
+        .btn-action { flex: 1; padding: 16px; border-radius: 10px; border: none; font-weight: bold; color: white; cursor: pointer; text-transform: uppercase; }
+    </style>
+</head>
+<body>
+
+<div class="header-app">
+    <div class="logo-container">
+        <img src="https://via.placeholder.com/200x80?text=Tu+Logo+Aquí" id="logoPreviewApp">
+    </div>
+    <div style="font-size: 11px; margin-top:10px; cursor:pointer; text-decoration: underline;" onclick="document.getElementById('logoInput').click()">⚙️ CONFIGURAR LOGO EMPRESA</div>
+    <input type="file" id="logoInput" accept="image/*" style="display:none" onchange="guardarLogo(this)">
+</div>
+
+<div class="container">
+    <div class="card">
+        <h4 style="margin:0 0 10px 0; color: var(--primary)">ENCABEZADO DEL REPORTE</h4>
+        <input type="text" id="tituloReporte" class="input-field" placeholder="Título (Ej: Mantenimiento Preventivo)">
+        <input type="text" id="ubicacion" class="input-field" placeholder="Ubicación / Proyecto">
+        <input type="text" id="nombreAutor" class="input-field" placeholder="Nombre del Responsable">
+    </div>
+
+    <div id="lista-reportes"></div>
+</div>
+
+<button class="btn-add" onclick="agregarFila()">+</button>
+
+<div class="footer-nav">
+    <button class="btn-action" style="background: #7f8c8d" onclick="generarPDF('download')">PDF</button>
+    <button class="btn-action" style="background: var(--success)" onclick="generarPDF('share')">COMPARTIR</button>
+</div>
+
+<canvas id="canvasCompresor" style="display:none;"></canvas>
+
+<script>
+    // REGISTRO DE SERVICE WORKER PARA PWA
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').then(reg => {
+                console.log('App lista para instalar');
+            }).catch(err => console.log('Error SW', err));
+        });
+    }
+
+    let logoBase64 = "";
+
+    window.onload = () => {
+        const savedLogo = localStorage.getItem('appLogo');
+        if (savedLogo) { 
+            logoBase64 = savedLogo; 
+            document.getElementById('logoPreviewApp').src = savedLogo; 
+        }
+        agregarFila();
+    };
+
+    function guardarLogo(input) {
+        if (!input.files[0]) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+            logoBase64 = e.target.result;
+            document.getElementById('logoPreviewApp').src = logoBase64;
+            localStorage.setItem('appLogo', logoBase64);
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+
+    function agregarFila() {
+        const lista = document.getElementById('lista-reportes');
+        const div = document.createElement('div');
+        div.className = 'card item-reporte';
+        div.id = "fila-" + Date.now(); 
+        
+        div.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+                <b class="label-consecutivo" style="color:var(--accent)">REGISTRO #</b>
+                <span onclick="eliminarFila('${div.id}')" style="color:#e74c3c; cursor:pointer; font-weight:bold; font-size:13px">✕ Quitar</span>
+            </div>
+            <input type="file" accept="image/*" capture="environment" class="input-field" onchange="procesarFoto(this)">
+            <img class="preview-img">
+            <input type="text" class="input-field field-desc" placeholder="Descripción de la imagen">
+            <textarea class="input-field field-obs" placeholder="Observaciones técnicas" rows="2"></textarea>
+            <select class="input-field field-status">
+                <option value="En Revisión">En Revisión</option>
+                <option value="Terminado">Terminado</option>
+                <option value="En Proceso">En Proceso</option>
+                <option value="Entregado">Entregado</option>
+                <option value="Aceptado">Aceptado</option>
+                <option value="Autorizado">Autorizado</option>
+                <option value="En ejecución">En ejecución</option>
+            </select>
+        `;
+        lista.appendChild(div);
+        reordenarIDs();
+    }
+
+    function eliminarFila(id) {
+        document.getElementById(id).remove();
+        reordenarIDs();
+    }
+
+    function reordenarIDs() {
+        const etiquetas = document.querySelectorAll('.label-consecutivo');
+        etiquetas.forEach((label, index) => {
+            label.innerText = `REGISTRO #${index + 1}`;
+        });
+    }
+
+    function procesarFoto(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.getElementById('canvasCompresor');
+                const ctx = canvas.getContext('2d');
+                let width = img.width;
+                let height = img.height;
+                const maxDim = 1000;
+                if (width > height && width > maxDim) { height *= maxDim / width; width = maxDim; }
+                else if (height > maxDim) { width *= maxDim / height; height = maxDim; }
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                const preview = input.parentElement.querySelector('.preview-img');
+                preview.src = dataUrl;
+                preview.style.display = 'block';
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function generarPDF(modo) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        const titulo = document.getElementById('tituloReporte').value || "REPORTE TÉCNICO";
+        const ubicacion = document.getElementById('ubicacion').value || "No especificada";
+        const autor = document.getElementById('nombreAutor').value || "Sin asignar";
+        const fecha = new Date().toLocaleString();
+
+        const dibujarEncabezadoPie = () => {
+            if (logoBase64) doc.addImage(logoBase64, 'JPEG', 15, 10, 35, 12, undefined, 'FAST');
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(titulo.toUpperCase(), 195, 15, { align: 'right' });
+            doc.line(15, 25, 195, 25);
+            
+            const pActual = doc.internal.getCurrentPageInfo().pageNumber;
+            doc.setFontSize(8);
+            doc.line(15, 282, 195, 282);
+            doc.text(`Ubicación: ${ubicacion} | Responsable: ${autor}`, 15, 288);
+            doc.text(`Página ${pActual}`, 195, 288, { align: 'right' });
+        };
+
+        dibujarEncabezadoPie();
+
+        doc.setFont(undefined, 'bold'); doc.setFontSize(11);
+        doc.text("INFORMACIÓN GENERAL", 15, 35);
+        doc.setFont(undefined, 'normal'); doc.setFontSize(10);
+        doc.text(`Proyecto: ${titulo}`, 15, 42);
+        doc.text(`Lugar: ${ubicacion}`, 15, 47);
+        doc.text(`Fecha: ${fecha}`, 15, 52);
+        doc.line(15, 55, 100, 55);
+
+        let y = 65;
+        const filas = document.querySelectorAll('.item-reporte');
+
+        filas.forEach((fila, index) => {
+            const img = fila.querySelector('.preview-img').src;
+            if (!img) return;
+
+            if (y > 210) { doc.addPage(); dibujarEncabezadoPie(); y = 35; }
+
+            const num = index + 1;
+            const desc = fila.querySelector('.field-desc').value || "N/A";
+            const obs = fila.querySelector('.field-obs').value || "N/A";
+            const status = fila.querySelector('.field-status').value;
+
+            doc.setDrawColor(52, 152, 219); doc.setLineWidth(0.5);
+            doc.line(15, y, 15, y + 50); 
+            
+            doc.setFont(undefined, 'bold');
+            doc.text(`REGISTRO #${num} - [${status}]`, 22, y + 4);
+            
+            doc.addImage(img, 'JPEG', 22, y + 8, 65, 45, undefined, 'FAST');
+            
+            doc.setFont(undefined, 'normal'); doc.setFontSize(9); doc.setTextColor(100);
+            doc.text("DESCRIPCIÓN:", 95, y + 12);
+            doc.setTextColor(0);
+            doc.text(doc.splitTextToSize(desc, 95), 95, y + 17);
+
+            doc.setTextColor(100); doc.text("OBSERVACIONES:", 95, y + 35);
+            doc.setTextColor(0);
+            doc.text(doc.splitTextToSize(obs, 95), 95, y + 40);
+
+            y += 60;
+        });
+
+        if (modo === 'download') { doc.save(`${titulo.replace(/\s+/g, '_')}.pdf`); }
+        else {
+            const blob = doc.output('blob');
+            const file = new File([blob], "Reporte.pdf", { type: "application/pdf" });
+            if (navigator.share) {
+                await navigator.share({ files: [file], title: 'Compartir Reporte' });
+            } else {
+                alert("Tu navegador no soporta compartir directamente. Se descargará el PDF.");
+                doc.save("Reporte.pdf");
+            }
+        }
+    }
+</script>
+</body>
+</html>
