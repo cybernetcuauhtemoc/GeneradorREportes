@@ -10,15 +10,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="manifest.json">
-
     <link rel="apple-touch-icon" href="icono.png">
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
-        :root { --primary: #2c3e50; --accent: #3498db; --bg: #f4f7f6; --success: #27ae60; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding-bottom: 120px; }
+        :root { --primary: #2c3e50; --accent: #3498db; --bg: #f4f7f6; --success: #27ae60; --danger: #e74c3c; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding-bottom: 140px; }
         
-        /* Logo Responsivo */
         .header-app { background: var(--primary); color: white; padding: 15px; text-align: center; }
         .logo-container { width: 100%; max-width: 220px; margin: 0 auto; }
         #logoPreviewApp { width: 100%; height: auto; max-height: 85px; object-fit: contain; background: white; padding: 8px; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
@@ -30,10 +28,12 @@
         .item-reporte { border-left: 6px solid var(--accent); transition: all 0.3s ease; }
         .preview-img { width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #ddd; display: none; background: #fafafa; }
 
-        /* Botones Flotantes */
-        .btn-add { position: fixed; bottom: 100px; right: 25px; width: 65px; height: 65px; border-radius: 50%; background: var(--accent); color: white; border: none; font-size: 35px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); z-index: 100; cursor: pointer; }
-        .footer-nav { position: fixed; bottom: 0; width: 100%; background: white; display: flex; padding: 20px; gap: 12px; border-top: 1px solid #ddd; box-sizing: border-box; box-shadow: 0 -3px 10px rgba(0,0,0,0.05); }
-        .btn-action { flex: 1; padding: 16px; border-radius: 10px; border: none; font-weight: bold; color: white; cursor: pointer; text-transform: uppercase; }
+        .btn-add { position: fixed; bottom: 120px; right: 25px; width: 60px; height: 60px; border-radius: 50%; background: var(--accent); color: white; border: none; font-size: 30px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); z-index: 100; cursor: pointer; }
+        
+        .footer-nav { position: fixed; bottom: 0; width: 100%; background: white; display: flex; padding: 12px; gap: 8px; border-top: 1px solid #ddd; box-sizing: border-box; box-shadow: 0 -3px 10px rgba(0,0,0,0.1); z-index: 1000; }
+        .btn-action { flex: 1; padding: 14px 5px; border-radius: 10px; border: none; font-weight: bold; color: white; cursor: pointer; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; }
+        
+        .btn-photo-trigger { width:100%; padding:15px; background:#f8f9fa; border:2px dashed #ccc; border-radius:8px; cursor:pointer; margin-bottom:10px; color: #666; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -60,19 +60,18 @@
 <button class="btn-add" onclick="agregarFila()">+</button>
 
 <div class="footer-nav">
+    <button class="btn-action" style="background: var(--danger)" onclick="limpiarTodo()">Limpiar</button>
     <button class="btn-action" style="background: #7f8c8d" onclick="generarPDF('download')">PDF</button>
-    <button class="btn-action" style="background: var(--success)" onclick="generarPDF('share')">COMPARTIR</button>
+    <button class="btn-action" style="background: var(--success)" onclick="generarPDF('share')">Compartir</button>
 </div>
 
 <canvas id="canvasCompresor" style="display:none;"></canvas>
 
 <script>
-    // REGISTRO DE SERVICE WORKER PARA PWA
+    // SERVICE WORKER
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js').then(reg => {
-                console.log('App lista para instalar');
-            }).catch(err => console.log('Error SW', err));
+            navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW error', err));
         });
     }
 
@@ -109,7 +108,12 @@
                 <b class="label-consecutivo" style="color:var(--accent)">REGISTRO #</b>
                 <span onclick="eliminarFila('${div.id}')" style="color:#e74c3c; cursor:pointer; font-weight:bold; font-size:13px">✕ Quitar</span>
             </div>
-            <input type="file" accept="image/*" capture="environment" class="input-field" onchange="procesarFoto(this)">
+            
+            <button type="button" class="btn-photo-trigger" onclick="this.nextElementSibling.click()">
+                📸 TOMAR FOTO O GALERÍA
+            </button>
+            <input type="file" accept="image/*" style="display:none" onchange="procesarFoto(this)">
+            
             <img class="preview-img">
             <input type="text" class="input-field field-desc" placeholder="Descripción de la imagen">
             <textarea class="input-field field-obs" placeholder="Observaciones técnicas" rows="2"></textarea>
@@ -139,6 +143,17 @@
         });
     }
 
+    function limpiarTodo() {
+        if (confirm("⚠️ ¿Deseas borrar todo el reporte actual?")) {
+            document.getElementById('tituloReporte').value = "";
+            document.getElementById('ubicacion').value = "";
+            document.getElementById('nombreAutor').value = "";
+            document.getElementById('lista-reportes').innerHTML = "";
+            agregarFila();
+            window.scrollTo(0, 0);
+        }
+    }
+
     function procesarFoto(input) {
         const file = input.files[0];
         if (!file) return;
@@ -160,6 +175,8 @@
                 const preview = input.parentElement.querySelector('.preview-img');
                 preview.src = dataUrl;
                 preview.style.display = 'block';
+                input.previousElementSibling.innerText = "✅ IMAGEN CARGADA";
+                input.previousElementSibling.style.background = "#e8f5e9";
             };
             img.src = e.target.result;
         };
@@ -176,12 +193,13 @@
         const fecha = new Date().toLocaleString();
 
         const dibujarEncabezadoPie = () => {
-            if (logoBase64) doc.addImage(logoBase64, 'JPEG', 15, 10, 35, 12, undefined, 'FAST');
+            if (logoBase64) {
+                try { doc.addImage(logoBase64, 'JPEG', 15, 10, 35, 12, undefined, 'FAST'); } catch(e){}
+            }
             doc.setFontSize(10);
             doc.setTextColor(100);
             doc.text(titulo.toUpperCase(), 195, 15, { align: 'right' });
             doc.line(15, 25, 195, 25);
-            
             const pActual = doc.internal.getCurrentPageInfo().pageNumber;
             doc.setFontSize(8);
             doc.line(15, 282, 195, 282);
@@ -190,7 +208,6 @@
         };
 
         dibujarEncabezadoPie();
-
         doc.setFont(undefined, 'bold'); doc.setFontSize(11);
         doc.text("INFORMACIÓN GENERAL", 15, 35);
         doc.setFont(undefined, 'normal'); doc.setFontSize(10);
@@ -204,7 +221,7 @@
 
         filas.forEach((fila, index) => {
             const img = fila.querySelector('.preview-img').src;
-            if (!img) return;
+            if (!img || img.includes('undefined')) return;
 
             if (y > 210) { doc.addPage(); dibujarEncabezadoPie(); y = 35; }
 
@@ -215,32 +232,27 @@
 
             doc.setDrawColor(52, 152, 219); doc.setLineWidth(0.5);
             doc.line(15, y, 15, y + 50); 
-            
             doc.setFont(undefined, 'bold');
             doc.text(`REGISTRO #${num} - [${status}]`, 22, y + 4);
-            
             doc.addImage(img, 'JPEG', 22, y + 8, 65, 45, undefined, 'FAST');
-            
             doc.setFont(undefined, 'normal'); doc.setFontSize(9); doc.setTextColor(100);
             doc.text("DESCRIPCIÓN:", 95, y + 12);
             doc.setTextColor(0);
             doc.text(doc.splitTextToSize(desc, 95), 95, y + 17);
-
             doc.setTextColor(100); doc.text("OBSERVACIONES:", 95, y + 35);
             doc.setTextColor(0);
             doc.text(doc.splitTextToSize(obs, 95), 95, y + 40);
-
             y += 60;
         });
 
-        if (modo === 'download') { doc.save(`${titulo.replace(/\s+/g, '_')}.pdf`); }
-        else {
+        if (modo === 'download') { 
+            doc.save(`${titulo.replace(/\s+/g, '_')}.pdf`); 
+        } else {
             const blob = doc.output('blob');
             const file = new File([blob], "Reporte.pdf", { type: "application/pdf" });
             if (navigator.share) {
                 await navigator.share({ files: [file], title: 'Compartir Reporte' });
             } else {
-                alert("Tu navegador no soporta compartir directamente. Se descargará el PDF.");
                 doc.save("Reporte.pdf");
             }
         }
