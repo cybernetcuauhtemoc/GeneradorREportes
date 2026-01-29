@@ -1,42 +1,41 @@
-const CACHE_NAME = 'reporte-pro-v7-cache';
+const CACHE_NAME = 'reporte-pro-v8';
+// Solo los archivos críticos indispensables
 const assets = [
-  './',
-  './index.html',
-  './manifest.json',
-  './icono.png',
-  './jspdf.umd.min.js'
+  'index.html',
+  'manifest.json',
+  'sw.js'
 ];
 
-// Instalación: Guarda los archivos en el almacenamiento del celular
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      console.log('Cache abierto, guardando recursos...');
-      return cache.addAll(assets);
+      // Usamos addAll de forma individual para que si uno falla, los demás sigan
+      assets.forEach(asset => {
+        cache.add(asset).catch(err => console.log("No se pudo cachear: " + asset));
+      });
     })
   );
 });
 
-// Activación: Limpia versiones viejas del cache
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cache => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
-          }
-        })
-      );
-    })
-  );
-});
-
-// Estrategia: Primero buscar en Cache, si no hay, intentar Red
 self.addEventListener('fetch', event => {
   event.respondWith(
     caches.match(event.request).then(response => {
-      return response || fetch(event.request);
+      // Retorna el archivo de cache o intenta buscarlo en internet
+      return response || fetch(event.request).catch(() => {
+        // Si no hay red y no está en cache, intenta retornar el index.html
+        if (event.request.mode === 'navigate') {
+          return caches.match('index.html');
+        }
+      });
     })
+  );
+});
+
+// Limpieza de versiones viejas
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys => Promise.all(
+      keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+    ))
   );
 });
